@@ -1,0 +1,42 @@
+name: RestAssured API Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Run API Tests
+        run: mvn clean test
+        continue-on-error: true
+
+      - name: Calculate Pass Percentage
+        run: |
+          total=$(grep -R "tests=" target/surefire-reports | awk -F'tests=' '{sum+=$2} END {print sum}')
+          failures=$(grep -R "failures=" target/surefire-reports | awk -F'failures=' '{sum+=$2} END {print sum}')
+          errors=$(grep -R "errors=" target/surefire-reports | awk -F'errors=' '{sum+=$2} END {print sum}')
+
+          failed=$((failures + errors))
+          passed=$((total - failed))
+
+          pass_percent=$((100 * passed / total))
+
+          echo "Pass Percentage: $pass_percent%"
+
+          if [ "$pass_percent" -lt 98 ]; then
+            echo "❌ API quality gate failed (98%)"
+            exit 1
+          fi

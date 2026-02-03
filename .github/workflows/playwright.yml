@@ -1,0 +1,52 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+
+jobs:
+  playwright-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Browsers
+        run: npx playwright install --with-deps
+
+      - name: Run Tests
+        run: npx playwright test
+        continue-on-error: true
+
+      - name: Calculate Pass Percentage
+        run: |
+          total=$(jq '.stats.expected' results.json)
+          passed=$(jq '.stats.passed' results.json)
+
+          pass_percent=$((100 * passed / total))
+
+          echo "Total: $total"
+          echo "Passed: $passed"
+          echo "Pass Percentage: $pass_percent%"
+
+          if [ "$pass_percent" -lt 95 ]; then
+            echo "❌ Pass percentage below threshold (95%)"
+            exit 1
+          fi
+
+      - name: Upload HTML Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
