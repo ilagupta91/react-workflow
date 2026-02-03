@@ -1,42 +1,60 @@
-name: RestAssured API Tests
+name: API Quality Gate (RestAssured)
 
 on:
-  push:
-    branches: [ main, develop ]
   pull_request:
+    types: [opened, synchronize, reopened]
+
+  workflow_call:
+    inputs:
+      test_type:
+        required: true
+        type: string
+      pass_threshold:
+        required: true
+        type: number
+
+env:
+  DEFAULT_TEST_TYPE: regression
+  DEFAULT_THRESHOLD: 98
 
 jobs:
   api-tests:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
       - name: Run API Tests
-        run: mvn clean test
+        run: |
+          TEST_TYPE=${{ inputs.test_type || env.DEFAULT_TEST_TYPE }}
+
+          if [ "$TEST_TYPE" = "smoke" ]; then
+            mvn clean test -Dgroups=smoke
+          else
+            mvn clean test
+          fi
         continue-on-error: true
 
-      - name: Calculate Pass Percentage
+      - name: Enforce Pass Percentage
         run: |
+          THRESHOLD=${{ inputs.pass_threshold || env.DEFAULT_THRESHOLD }}
+
           total=$(grep -R "tests=" target/surefire-reports | awk -F'tests=' '{sum+=$2} END {print sum}')
           failures=$(grep -R "failures=" target/surefire-reports | awk -F'failures=' '{sum+=$2} END {print sum}')
           errors=$(grep -R "errors=" target/surefire-reports | awk -F'errors=' '{sum+=$2} END {print sum}')
 
           failed=$((failures + errors))
           passed=$((total - failed))
-
           pass_percent=$((100 * passed / total))
 
-          echo "Pass Percentage: $pass_percent%"
+          echo "Pass % = $pass_percent"
 
-          if [ "$pass_percent" -lt 98 ]; then
-            echo "❌ API quality gate failed (98%)"
+          if [ "$pass_percent" -lt "$THRESHOLD" ]; then
+            echo "❌ API quality gate failed"
             exit 1
           fi

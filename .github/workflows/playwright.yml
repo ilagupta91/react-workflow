@@ -1,50 +1,63 @@
-name: Playwright Tests
+name: Playwright Quality Gate
 
 on:
-  push:
-    branches: [ main, develop ]
   pull_request:
+    types: [opened, synchronize, reopened]
+
+  workflow_call:
+    inputs:
+      test_type:
+        required: true
+        type: string
+      pass_threshold:
+        required: true
+        type: number
+
+env:
+  DEFAULT_TEST_TYPE: regression
+  DEFAULT_THRESHOLD: 95
 
 jobs:
   playwright-tests:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install Dependencies
-        run: npm ci
+      - run: npm ci
+      - run: npx playwright install --with-deps
 
-      - name: Install Browsers
-        run: npx playwright install --with-deps
+      - name: Run Playwright Tests
+        run: |
+          TEST_TYPE=${{ inputs.test_type || env.DEFAULT_TEST_TYPE }}
 
-      - name: Run Tests
-        run: npx playwright test
+          if [ "$TEST_TYPE" = "smoke" ]; then
+            npx playwright test --grep @smoke
+          else
+            npx playwright test
+          fi
         continue-on-error: true
 
-      - name: Calculate Pass Percentage
+      - name: Enforce Pass Percentage
         run: |
+          THRESHOLD=${{ inputs.pass_threshold || env.DEFAULT_THRESHOLD }}
+
           total=$(jq '.stats.expected' results.json)
           passed=$(jq '.stats.passed' results.json)
-
           pass_percent=$((100 * passed / total))
 
-          echo "Total: $total"
-          echo "Passed: $passed"
-          echo "Pass Percentage: $pass_percent%"
+          echo "Pass % = $pass_percent"
 
-          if [ "$pass_percent" -lt 95 ]; then
-            echo "❌ Pass percentage below threshold (95%)"
+          if [ "$pass_percent" -lt "$THRESHOLD" ]; then
+            echo "❌ Playwright quality gate failed"
             exit 1
           fi
 
-      - name: Upload HTML Report
+      - name: Upload Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
