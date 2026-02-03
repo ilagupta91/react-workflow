@@ -63,3 +63,19 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report
+
+
+#How we can use this during deployment and run tests before deployment
+# In your deployment workflow, you can call this Playwright quality gate workflow as follows:
+#jobs:
+#  quality-gate:
+#    uses: ./.github/workflows/playwright-quality-gate.yml
+#   with:
+#      test_type: smoke
+#      pass_threshold: 100
+
+#  deploy:
+#    needs: quality-gate
+#    runs-on: ubuntu-latest
+#    steps:
+#      - run: echo "Deploying 🚀"
